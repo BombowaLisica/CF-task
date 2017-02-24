@@ -2,7 +2,7 @@
 
 
 arr.data <- function(t.data, t.n_user = NULL, t.n_movie = NULL){
-  # parametr n_movie jest wa??ny - je??li w test pojawi si?? nowy film, model b??dize nieaktualny
+  # parametr n_movie jest wa¿ny - jeœli w test pojawi siê nowy film, model bêdize nieaktualny
   if (missing(t.data) || dim(t.data)[2] != 3) {
     stop("Please use a valid data")
   }
@@ -91,7 +91,7 @@ rbm.act_vis <- function(t.weight, t.state) {
   for (i in 1:n_rate){
     act[[i]] <- -weight_t[,,i] %*% t.state + 1
   }
-  # w pierwszej iteracji wychodz?? takie same pstwa dla wszystkich vis, podejrzane
+  # w pierwszej iteracji wychodz¹ takie same pstwa dla wszystkich vis, podejrzane
   counter <- lapply(act, exp)
   denom <- Reduce("+", counter)
   ret <- array(0, c(n_movie, n_batch, n_rate))
@@ -102,7 +102,7 @@ rbm.act_vis <- function(t.weight, t.state) {
 }
 
 
-# w????czamy i wy????czamy unit z pstwem zdefiniowanym energi??
+# w³¹czamy i wy³¹czamy unit z pstwem zdefiniowanym energi¹
 rbm.samp_state <- function(t.mat) {
   dims=dim(t.mat)
   if (length(dims) == 3){
@@ -135,7 +135,7 @@ rbm.cf <- function(t.n_hid = 45
   if (t.epochs <= 0) { stop("Please set valid number of hidden units") }
   if (t.batch_size <= 0 || t.batch_size > n_user) { stop("Please set valid size of batch") }
   
-  # do obsluzenia stack tutaj p??tla po length(t.n_hid)
+  # do obsluzenia stack tutaj pêtla po length(t.n_hid)
   weight = array(runif(t.n_hid*n_movie*n_rate, -0.1, 0.1), c(t.n_hid, n_movie, n_rate))
   class(weight) <- "rbm_single"
   momentum_speed = array(0, c(t.n_hid, n_movie, n_rate))
@@ -149,12 +149,12 @@ rbm.cf <- function(t.n_hid = 45
     batch_t <- aperm(batch, c(2,1,3))
     batch_beg <- batch_end + 1
     
-    visible_data <- rbm.samp_state(batch)  # gdyby to bylo CDn nie CD1 to mia??oby sens
+    visible_data <- rbm.samp_state(batch)  # gdyby to bylo CDn nie CD1 to mia³oby sens
     H0 <- rbm.samp_state(rbm.act_hid(weight, batch))
     
     vh0 <- array(0, c(t.n_hid, n_movie, n_rate))
     for (k in 1:n_rate){ vh0[,,k] <- H0 %*% batch_t[,,k] }
-    vh0 <- vh0/dim(batch)[2]  # faza positive (hid x nmovie) -u??rednienie po liczbie przypadk??w
+    vh0 <- vh0/dim(batch)[2]  # faza positive (hid x nmovie) -uœrednienie po liczbie przypadków
     
     V1 <- rbm.samp_state(rbm.act_vis(weight, H0)) # stany aktywacji visible units wg p-stw (vi x batch x k)
     H1 <- rbm.act_hid(weight, V1)
@@ -174,8 +174,8 @@ rbm.cf <- function(t.n_hid = 45
                 , epochs = t.epochs
                 , batch_size = t.batch_size
                 , momentum = t.momentum)
-  # ale to do obs??u??enia jeszcze....
-  # ka??da warstwa musi mie?? swoj?? macierz wag
+  # ale to do obs³u¿enia jeszcze....
+  # ka¿da warstwa musi mieæ swoj¹ macierz wag
   if (length(t.n_hid) == 1){
     class(model) <- 'rbm_single'  
   } else {
@@ -198,7 +198,7 @@ rbm.pred_hid <- function(t.weight, t.data){
     data <- rbm.act_hid(t.weight, data)
   }else if(class(t.weight) == 'rbm_stack'){
     for(i in 1:length(t.weight)){
-      # tu b??dzie problem z weight
+      # tu bêdzie problem z weight
       data <- rbm.act_hid(t.weight[[i]]$weight, data)
     }
   }else{

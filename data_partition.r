@@ -35,3 +35,9 @@ rm(test1)
 ucz <- data.frame(ucz)
 wal <- data.frame(wal)
 test <- data.frame(test)
+
+
+rmse <- function(t.test, t.rate){
+  rmse <- sqrt(sum((t.test$rate - t.rate)^2, na.rm = T)/length(which(is.na(t.rate)==F)))
+  return(rmse)
+}

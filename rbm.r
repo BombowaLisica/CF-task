@@ -116,14 +116,16 @@ rbm.samp_state <- function(t.mat) {
 
 
 
-rbm.cf <- function(t.n_hid = 45
+rbm.train <- function(t.n_hid = 45
                    , t.ucz
+                   , t.wal = NULL
                    , t.n_user = NULL
                    , t.n_movie = NULL
                    , t.learning_rate = 0.005
-                   , t.epochs = 50
+                   , t.epochs = 10
                    , t.batch_size = 20
-                   , t.momentum = 0.9) {
+                   , t.momentum = 0.9
+                   , t.train_control = F) {
   
   data <- arr.data(t.ucz, t.n_user, t.n_movie)
   
@@ -136,36 +138,43 @@ rbm.cf <- function(t.n_hid = 45
   if (t.batch_size <= 0 || t.batch_size > n_user) { stop("Please set valid size of batch") }
   
   # do obsluzenia stack tutaj pętla po length(t.n_hid)
-  weight = array(runif(t.n_hid*n_movie*n_rate, -0.1, 0.1), c(t.n_hid, n_movie, n_rate))
+  weight = array(rnorm(t.n_hid*n_movie*n_rate, 0, 0.01), c(t.n_hid, n_movie, n_rate))
   class(weight) <- "rbm_single"
   momentum_speed = array(0, c(t.n_hid, n_movie, n_rate))
   
-  batch_beg = 1
   for (epoch in 1:t.epochs) {
-    
-    batch_end = batch_beg + t.batch_size - 1
-    if (batch_end >= n_user) (batch_end <- n_user)
-    batch <- data[, batch_beg:batch_end,]
-    batch_t <- aperm(batch, c(2,1,3))
-    batch_beg <- batch_end + 1
-    
-    visible_data <- rbm.samp_state(batch)  # gdyby to bylo CDn nie CD1 to miałoby sens
-    H0 <- rbm.samp_state(rbm.act_hid(weight, batch))
-    
-    vh0 <- array(0, c(t.n_hid, n_movie, n_rate))
-    for (k in 1:n_rate){ vh0[,,k] <- H0 %*% batch_t[,,k] }
-    vh0 <- vh0/dim(batch)[2]  # faza positive (hid x nmovie) -uśrednienie po liczbie przypadków
-    
-    V1 <- rbm.samp_state(rbm.act_vis(weight, H0)) # stany aktywacji visible units wg p-stw (vi x batch x k)
-    H1 <- rbm.act_hid(weight, V1)
-    
-    vh1 <- array(0, c(t.n_hid, n_movie, n_rate))
-    for (k in 1:n_rate){ vh1[,,k] <- H1 %*% aperm(V1, c(2,1,3))[,,k] }
-    vh1 <- vh1/dim(V1)[2] # faza negative
-    
-    gradient        <- vh0-vh1
-    momentum_speed  <- t.momentum * momentum_speed + gradient       # a tu algorytm uczenia
-    weight           <- weight + momentum_speed * t.learning_rate
+    batch_beg = 1
+    batch_end <- 0
+    while (batch_end < n_user){
+      batch_end = batch_beg + t.batch_size - 1
+      if (batch_end >= n_user) (batch_end <- n_user)
+      batch <- data[, batch_beg:batch_end,]
+      batch_t <- aperm(batch, c(2,1,3))
+      if (batch_end < n_user) (batch_beg <- batch_end + 1)
+      
+      visible_data <- rbm.samp_state(batch)  # gdyby to bylo CDn nie CD1 to miałoby sens
+      H0 <- rbm.samp_state(rbm.act_hid(weight, batch))
+      
+      vh0 <- array(0, c(t.n_hid, n_movie, n_rate))
+      for (k in 1:n_rate){ vh0[,,k] <- H0 %*% batch_t[,,k] }
+      vh0 <- vh0/dim(batch)[2]  # faza positive (hid x nmovie) -uśrednienie po liczbie przypadków
+      
+      V1 <- rbm.samp_state(rbm.act_vis(weight, H0)) # stany aktywacji visible units wg p-stw (vi x batch x k)
+      H1 <- rbm.act_hid(weight, V1)
+      
+      vh1 <- array(0, c(t.n_hid, n_movie, n_rate))
+      for (k in 1:n_rate){ vh1[,,k] <- H1 %*% aperm(V1, c(2,1,3))[,,k] }
+      vh1 <- vh1/dim(V1)[2] # faza negative
+      
+      gradient        <- vh0 - vh1
+      momentum_speed  <- t.momentum * momentum_speed + gradient       # a tu algorytm uczenia
+      weight           <- weight + momentum_speed * t.learning_rate
+    }
+    if (t.train_control == T){
+      t.pred <- rbm.pred(t.wal, list(weight = weight, ucz = t.ucz))
+      cat("\n"); cat("epoch: ", epoch, " rmse on wal: ", rmse(t.wal, t.pred))
+    }
+    # some early stopping here
   }
   
   model <- list(weight = weight
@@ -224,7 +233,7 @@ rbm.pred_vis <- function(t.weight, t.data){
 
 
 
-pred.rbm <- function(t.test, t.model){
+rbm.pred <- function(t.test, t.model){
   
   data <- subset(t.model$ucz, user %in% t.test$user)
   data <- arr.data(data, t.n_movie = dim(t.model$weight)[2])
@@ -245,26 +254,24 @@ pred.rbm <- function(t.test, t.model){
 
 
 
-rmse <- function(t.test, t.rate){
-  rmse <- sqrt(sum((t.test$rate - t.rate)^2, na.rm = T)/length(which(is.na(t.rate)==F)))
-  return(rmse)
-}
 
 
 
 
-
-weight = rbm.cf(t.n_hid = 45
+rbm = rbm.train(t.n_hid = 45
                 , t.ucz = ucz[,1:3]
+                , t.wal = wal[,1:3]
                 , t.n_movie = 1682
-                , t.learning_rate = 0.005
-                , t.epochs = 50
-                , t.batch_size = 2
-                , t.momentum = 0.9)
-pred <- pred.rbm(test, weight)
-(rmse <- rmse(test, pred))
-summary(pred); summary(test$rate)
+                , t.learning_rate = 0.0005
+                , t.epochs = 20
+                , t.batch_size = 20
+                , t.momentum = 0.8
+                , t.train_control = T)
+# błąd tylko rośnie....
+pred.rbm <- rbm.pred(test, rbm)
+(rmse.rbm <- rmse(test, pred.rbm))
+summary(pred.rbm); summary(test$rate)
 par(mfrow=c(2,1))
-hist(test$rate);hist(pred, xlim=c(1,5))
-# 1.600757
-# 1.288   2.351   2.802   2.699   3.051   4.297
+hist(test$rate);hist(pred.rbm, xlim=c(1,5))
+# 1.956328
+# 1.092   1.631   2.462   2.368   3.009   4.033

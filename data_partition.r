@@ -4,11 +4,24 @@ require(data.table)
 library(tidyr)
 
 #setwd("")
+
 # movieLens data
 dane <- read.table("u.data")
 names <- c("user","movie","rate","time")
 names(dane) <- names
 
+# some global parameters
+n_user <- length(unique(dane$user))
+n_movie <- length(unique(dane$movie))
+n_rate <- length(unique(dane$rate))
+
+
+# check if enumerating starts from 1
+min(dane$user)
+min(dane$movie)
+
+
+# last 12 records - the latest 6 records go into test, rest into wal
 test1 <- mutate(dane, row.numb = row_number()) %>%
   group_by(user) %>%
   arrange(-time)
@@ -37,7 +50,4 @@ wal <- data.frame(wal)
 test <- data.frame(test)
 
 
-rmse <- function(t.test, t.rate){
-  rmse <- sqrt(sum((t.test$rate - t.rate)^2, na.rm = T)/length(which(is.na(t.rate)==F)))
-  return(rmse)
-}
+

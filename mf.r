@@ -1,15 +1,12 @@
 
 # r = q_i*b_u
-# bez normalizacji
-
-rmse <- function(t.test, t.pred){
-  rmse <- sqrt(sum((t.test$rate - t.pred)^2, na.rm = T)/length(which(is.na(t.pred)==F)))
-  return(rmse)
-}
+# without normalization
 
 
-mf.predict <- function(t.test, t.model){
 
+# predict method
+pred.mf <- function(t.model, t.test){
+  
   if (is.null(t.test) == T) {
     stop("Test set can not be empty")
   } else {
@@ -17,7 +14,7 @@ mf.predict <- function(t.test, t.model){
     tm <- t.test$movie
     tu <- t.test$user
   }
-  # jeszcze warunek na klasę modelu
+
   p_u <- t.model$P
   q_i <- t.model$Q
   rmse <- NA
@@ -32,12 +29,19 @@ mf.predict <- function(t.test, t.model){
   rmse <- sqrt(sum((t.test$rate - t.rate)^2, na.rm = T)/length(which(is.na(t.rate)==F)))
   cover <- length(t.rate[is.na(t.rate)==FALSE])/dim(t.test)[1]
   
-  return(list(pred = t.rate, rmse = rmse, cover = cover))
+  prediction <- list(pred = t.rate, rmse = rmse, cover = cover)
+  class(prediction) <- "mf.pred"
+  
+  return(prediction)
   
 }
 
 
-mf.train <- function(t.g = c(0, 0)
+
+
+
+
+train.mf <- function(t.g = c(0, 0)
                      , t.lambda = c(0, 0)
                      , t.k = 45
                      , t.laps = 30
@@ -49,7 +53,11 @@ mf.train <- function(t.g = c(0, 0)
                      , t.sd = 0.1
                      , t.traincontrol = FALSE
 ){
-  # jakies checki trzeba porobic
+  # some checks
+  if (is.null(t.ucz) == T) {
+    stop("Training set can not be empty")
+  }
+  
   d <- dim(t.ucz)[1]
   
   pred_u <- rep(NA, d)
@@ -73,7 +81,7 @@ mf.train <- function(t.g = c(0, 0)
   tu <- t.ucz$user
   tr <- t.ucz$rate
   
-  # moznaby tu wprowadzic batch?
+  # batch?
   for (j in 1:t.laps){
     samp <- sample(1:d)
     for (i in samp){
@@ -85,29 +93,37 @@ mf.train <- function(t.g = c(0, 0)
       p_u[tu[i],] <- p_u[tu[i],] + t.g[2]*d*t.w[i]*(e*q_i[,tm[i]] - t.lambda[2]*p_u[tu[i],])
     }
     
-    pred.w <- mf.predict(t.wal, list(Q = q_i, P = p_u))
-    l.rmse_w[j] <-  pred.w$rmse
-    cover_w <- pred.w$cover
-
+    mod <- list(Q = q_i, P = p_u)
+    class(mod) <- "mf"
+    
+    pred_w <- pred(mod, t.wal)
+    l.rmse_w[j] <-  pred_w$rmse
+    cover_w <- pred_w$cover
+    
     if (t.traincontrol == TRUE){
-      pred.u <- mf.predict(t.ucz, list(Q = q_i, P = p_u))
-      l.rmse_u[j] <-  pred.u$rmse
-      cover_u <- pred.u$cover
-      pred <- pred.u$pred
+      mod <- list(Q = q_i, P = p_u)
+      class(mod) <- "mf"
+      prediction <- pred(mod, t.ucz)
+      l.rmse_u[j] <-  prediction$rmse
+      cover_u <- prediction$cover
+      pred_u <- prediction$pred
       kara <- t.lambda[1]*sqrt(sum(q_i[,unique(tm)]^2, na.rm = T)) + t.lambda[2]*sqrt(sum(p_u[unique(tu),]^2, na.rm = T))
-      cost <- sum((tr - pred)^2, na.rm = T) + kara
+      cost <- sum((tr - pred_u)^2, na.rm = T) + kara
       cat("\n epoch: ", j, "kara: ", kara, "cost: ", cost, "rmse on ucz: ", l.rmse_u[j],"rmse on val: ", l.rmse_w[j], "\n")
     }
-
+    
     if(j > 4 && abs(l.rmse_w[j] - l.rmse_w[j-1]) < 0.0001) {
       t.laps <- j
       break}
   }
   
-  return(list(Q = q_i, P = p_u
-              ,laps = t.laps, g = t.g, lambda = t.lambda, k = t.k
-              ,rmse_u = l.rmse_u, cover_u = cover_u
-              ,rmse_w = l.rmse_w, cover_w = cover_w))
+  model <- list(Q = q_i, P = p_u
+                ,laps = t.laps, g = t.g, lambda = t.lambda, k = t.k
+                ,rmse_u = l.rmse_u[1:j], cover_u = cover_u
+                ,rmse_w = l.rmse_w[1:j], cover_w = cover_w)
+  class(model) <- "mf"
+  
+  return(model)
 }
 
 
@@ -115,10 +131,10 @@ mf.train <- function(t.g = c(0, 0)
 
 
 time.start <- Sys.time()
-mf <- mf.train(t.g = c(0.01, 0.01)
+mf.model <- train.mf(t.g = c(0.01, 0.01)
                , t.lambda = c(0.05, 0.05)
-               , t.k =45
-               , t.laps = 100 # 30
+               , t.k = 45
+               , t.laps = 30
                , t.wal = wal
                , t.ucz = ucz
                , t.n_user = n_user
@@ -127,6 +143,19 @@ mf <- mf.train(t.g = c(0.01, 0.01)
                , t.traincontrol = TRUE)
 time.stop <- Sys.time()
 (time <- time.stop - time.start)
-plot(1:mf$laps, mf$rmse_u[1:mf$laps], type= "l")
-lines(1:mf$laps, mf$rmse_w[1:mf$laps], col = "red")
+
+graphics.off()
+plot(1:mf.model$laps, mf.model$rmse_u[1:mf.model$laps], type= "l"
+     , main = "MF", xlab = "epoch", ylab = "rmse")
+lines(1:mf.model$laps, mf.model$rmse_w[1:mf.model$laps], col = "red")
+legend("topright", c("training set", "wal set"), fill = c("black", "red"))
+
+mf.pred <- pred(mf.model, test)
+(rmse.mf <- rmse(test, mf.pred$pred))
+summary(mf.pred$pred); summary(test$rate)
+par(mfrow=c(2,1))
+hist(test$rate); hist(mf.pred$pred, xlim=c(1,5))
+
+
+
 

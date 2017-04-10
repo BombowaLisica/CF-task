@@ -1,7 +1,7 @@
 
 # bias-variance tradeoff for original method and bagging
 
-n <- 2
+n <- 5
 samp_bagg.n <- 25
 samp_train.fun <- train.mf
 samp_train.args <- list(t.g = c(0.01, 0.01)
@@ -43,8 +43,46 @@ for (i in 1:n){
 }
 
 
-model_org_var <- head(apply(pred_model_org, 1, var))
-model_org_bias <- head((test$rate - apply(pred_model_org, 1, mean))^2)
+model_org_var <- apply(pred_model_org, 1, var)
+model_org_bias <- (test$rate - apply(pred_model_org, 1, mean))^2
 
-model_bagg_var <- head(apply(pred_model_org, 1, var))
-model_bagg_bias <- head((test$rate - apply(pred_model_org, 1, mean))^2)
+model_bagg_var <- apply(pred_model_bagg, 1, var)
+model_bagg_bias <- (test$rate - apply(pred_model_bagg, 1, mean))^2
+
+
+
+# random k observations from test set
+
+k <- 10
+ktore <- sample(1:length(test$rate), k)
+ktore <- ktore[order(test$rate[ktore])]
+
+# boxplot maybe?
+par(mfrow=c(2,2)) # loop through methods (+ boosting)
+plot(1:k, test$rate[ktore], col = "red", ylim = c(1, 5), type = "p", main = "Model oryginalny"
+     ,xlab = "", ylab = "test rate")
+for (i in 1:n){
+  lines(pred_model_org[ktore, i], col = "blue")
+}
+legend("topleft", c("training set", "prediction"), fill = c("red", "blue"))
+
+plot(1:k, test$rate[ktore], col = "red", ylim = c(1, 5), type = "p", main = "Model zagregowany - bagging"
+     ,xlab = "", ylab = "test rate")
+for (i in 1:n){
+  lines(pred_model_bagg[ktore, i], col = "blue")
+}
+legend("topleft", c("training set", "prediction"), fill = c("red", "blue"))
+
+
+plot(1:k, (apply((test$rate - pred_model_org)^2, 1, sum)/n)[ktore], col = "red", type = "b", ylim = c(0, max(model_org_bias[ktore]))
+     ,xlab = "", ylab = "")
+lines(1:k, model_org_bias[ktore], col = "blue", type = "l")
+lines(1:k, model_org_var[ktore], col="green")
+legend("topleft", c("error", "bias", "variance"), fill = c("red", "blue", "green"))
+
+
+plot(1:k, (apply((test$rate - pred_model_bagg)^2, 1, sum)/n)[ktore], col = "red", type = "b", ylim = c(0, max(model_org_bias[ktore]))
+     ,xlab = "", ylab = "")
+lines(1:k, model_bagg_bias[ktore], col = "blue", type = "l")
+lines(1:k, model_bagg_var[ktore], col="green")
+legend("topleft", c("error", "bias", "variance"), fill = c("red", "blue", "green"))

@@ -44,14 +44,14 @@ train.boosting <- function(n
     er <- sum(weight[ae.vec])
     b[i] <- (1-er)/er
     
-    if (b[i] < 1) {
-      weight <- rep(1/d, d)
-    } else {
+#    if (b[i] < 1) {
+#      weight <- rep(1/d, d)
+#    } else {
       weight_new[ae.vec] <- weight[ae.vec]*b[i]
       weight_new[-ae.vec] <- weight[-ae.vec]
       z <- sum(weight_new[ae.vec]) + sum(weight_new[-ae.vec])
       weight <- weight_new/z 
-    }
+#    }
         
     proba$pred.ucz[,i] <- p.pred.ucz$pred
     
@@ -79,7 +79,7 @@ train.boosting <- function(n
 }
 
   
-boost.n <- 10
+boost.n <- 50
 boost.train_fun <- train.mf
 boost.train_args <- list(t.g = c(0.01, 0.01)
                          , t.lambda = c(0.05, 0.05)
@@ -94,13 +94,14 @@ boost.train_args <- list(t.g = c(0.01, 0.01)
 boost.t.test <- test
   
   
-  
+start <- Sys.time()  
 boosting.model <- train.boosting(n = boost.n
                                  , tresh = 0.8
                                  , train_fun = boost.train_fun
                                  , train_args = boost.train_args
                                  , t.test = boost.t.test)  
-
+stop <- Sys.time()
+(stop - start)
 
 cat("whole set: ", "\n")
 pred_total <- do.call(boost.train_fun, boost.train_args)

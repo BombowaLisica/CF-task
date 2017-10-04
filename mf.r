@@ -304,9 +304,9 @@ train.mf <- function(t.g = c(0, 0)
       cat("\n epoch: ", j, "kara: ", kara, "cost: ", cost, "rmse on ucz: ", l.rmse_u[j],"rmse on val: ", l.rmse_w[j], "\n")
     }
     
-    if(j > 4 && abs(l.rmse_w[j] - l.rmse_w[j-1]) < 0.0001) {
-      t.laps <- j
-      break}
+#    if(j > 4 && abs(l.rmse_w[j] - l.rmse_w[j-1]) < 0.0001) {
+#      t.laps <- j
+#      break}
   }
   
   model <- list(Q = q_i, P = p_u
@@ -321,7 +321,9 @@ train.mf <- function(t.g = c(0, 0)
 
 
 
-
+##################################################################
+### parameters tuning
+##################################################################
 
 
 
@@ -353,4 +355,35 @@ hist(test$rate); hist(mf.pred$pred, xlim=c(1,5))
 
 
 
+##################################################################
+### k choise
+##################################################################
 
+
+proba <- list()
+k <- 1
+for (i in 15:100){
+  cat("k= ", k, " i= ", i, "\n")
+  mf.model <- train.mf(t.g = c(0.01, 0.01)
+                       , t.lambda = c(0.05, 0.05)
+                       , t.k = i
+                       , t.laps = 30
+                       , t.wal = wal
+                       , t.ucz = ucz
+                       , t.n_user = n_user
+                       , t.n_movie = n_movie
+                       , t.sd = 0.01
+                       , t.traincontrol = FALSE)
+  mf.pred <- pred(mf.model, wal)
+  rmse.mf <- rmse(test, mf.pred$pred)
+  
+  proba$n <- c(proba$n, i)
+  proba$rmse <- c(proba$rmse,rmse.mf)
+  proba$cover <- c(proba$cover, mf.model$cover)
+  proba$pred[[k]] <- mf.pred$pred
+  k <- k + 1
+}
+
+
+plot(proba$n, proba$rmse, type = "l"
+     , main = "MF", xlab = "k", ylab = "rmse")

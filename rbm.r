@@ -190,6 +190,8 @@ train.rbm <- function(t.n_hid = 45
   weight <- list()
   momentum_speed <- list()
   bias_vis <- list()
+  rmse_u <- list()
+  rmse_w <- list()
   for(i in 1:n_rate){
     weight[[i]] <- matrix(rnorm(t.n_hid*n_movie, 0, 0.001/i), nrow=t.n_hid, ncol=n_movie)
     momentum_speed[[i]] <- matrix(0, nrow=t.n_hid, ncol=n_movie)
@@ -250,8 +252,11 @@ train.rbm <- function(t.n_hid = 45
       bias_hid <- bias_hid + t.learning_rate * (rowSums(H0 - H1)/dim(H1)[2])
     }
     if (t.train_control == T){
-      t.pred <- pred.rbm(list(weight = weight, bias_hid = bias_hid, bias_vis = bias_vis, ucz = t.ucz, n_user = n_user, n_movie = n_movie, n_rate = n_rate), t.wal)
-      cat("\n"); cat("epoch: ", epoch, " rmse on wal: ", rmse(t.wal, t.pred$pred), "\n")
+      t.pred_u <- pred.rbm(list(weight = weight, bias_hid = bias_hid, bias_vis = bias_vis, ucz = t.ucz, n_user = n_user, n_movie = n_movie, n_rate = n_rate), t.ucz)
+      t.pred_w <- pred.rbm(list(weight = weight, bias_hid = bias_hid, bias_vis = bias_vis, ucz = t.ucz, n_user = n_user, n_movie = n_movie, n_rate = n_rate), t.wal)
+      cat("\n"); cat("epoch: ", epoch, " rmse on wal: ", rmse(t.wal, t.pred_w$pred), " rmse on ucz: ", rmse(t.ucz, t.pred_u$pred), "\n")
+      rmse_u[[epoch]] <- t.pred_u$rmse
+      rmse_w[[epoch]] <- t.pred_w$rmse
     }
   }
   
@@ -265,7 +270,9 @@ train.rbm <- function(t.n_hid = 45
                 , learning_rate = t.learning_rate
                 , epochs = t.epochs
                 , batch_size = t.batch_size
-                , momentum = t.momentum)
+                , momentum = t.momentum
+                , rmse_u = rmse_u
+                , rmse_w = rmse_w)
   class(model) <- 'rbm'
   #  if (n_rate == 1){
   #    class(model) <- 'rbm_single'  
@@ -365,14 +372,21 @@ rbm.model = train.rbm(t.n_hid = 45
                       , t.n_movie = 1682
                       , t.learning_rate = 0.01
                       , t.lambda = 0
-                      , t.epochs = 5
-                      , t.batch_size = 60
+                      , t.epochs = 10
+                      , t.batch_size = 200
                       , t.momentum = 0.8
                       , t.train_control = T)
 stop <- Sys.time()
 stop-start
 # Time difference of 1.271265 mins
 # Time difference of 1.003673 mins
+
+
+plot(1:rbm.model$epochs, rbm.model$rmse_u[1:rbm.model$epochs], type= "l"
+     , main = "RBM", xlab = "epoch", ylab = "rmse", ylim = c(1, 1.2))
+lines(1:rbm.model$epochs, rbm.model$rmse_w[1:rbm.model$epochs], col = "red")
+legend("topright", c("training set", "wal set"), fill = c("black", "red"))
+
 
 rbm.pred <- pred.rbm(rbm.model, test)
 (rmse.rbm <- rmse(test, rbm.pred$pred))

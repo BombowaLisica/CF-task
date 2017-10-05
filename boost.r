@@ -28,14 +28,17 @@ train.boosting <- function(t.n
     
     pred.args <- t.train_args
     if(t.boostType == "weight"){
-      pred.args$t.w <- weight
+#      pred.args$t.w <- weight
+      inProbe <- 1:d
     }else if (t.boostType == "sample"){
       # losowanie z pstwem
       inProbe <- sample(1:d, d, TRUE, weight)
-      pred.args$t.ucz <- pred.args$t.ucz[inProbe,]
     }else{
       stop("Please use valid boosting type")
     }
+    
+    pred.args$t.ucz <- boost.ucz[inProbe,]
+    pred.args$t.w <- weight[inProbe]
     
     
     p <- do.call(t.train_fun, pred.args)
@@ -50,28 +53,48 @@ train.boosting <- function(t.n
 
     
     ### based on https://arxiv.org/ftp/arxiv/papers/1211/1211.2891.pdf
-    ae <- abs(p.pred.ucz$pred - boost.ucz$rate) # odst??pstwo od oryginalngo algorytmu
+    ae <- abs(p.pred.ucz$pred - boost.ucz$rate)
     ae.vec <- which(ae > t.tresh)
     er <- sum(weight[ae.vec])
-    b[i] <- er#(1-er)/er
-    
+    b[i] <- er#(1-er)/er # odst??pstwo od oryginalngo algorytmu
+
 #    if (b[i] < 1) {
 #      break
 #          weight <- rep(1/d, d)
 #    } else {
     # zwi??kszamy wagi ocen z??ych, albo zmniejszamy dobrych
-      weight_new[ae.vec] <- weight[ae.vec]#*b[i]
-      weight_new[-ae.vec] <- weight[-ae.vec]  * b[i]
+      weight_new[ae.vec] <- weight[ae.vec]/b[i]
+      weight_new[-ae.vec] <- weight[-ae.vec]#  * b[i]
       z <- sum(weight_new[ae.vec]) + sum(weight_new[-ae.vec])
-      weight <- weight_new/z 
+      weight <- weight_new/z
 #    }
-    #####  
+    #####
     
-      
+
+  #   ### orygina??
+  #   ae <- abs(p.pred.ucz$pred - boost.ucz$rate)
+  #   ae.vec <- which(ae > t.tresh)
+  #   er <- sum(weight[ae.vec])
+  #   b[i] <- (1-er)/er
+  # 
+  #     # ten krok generuje regularno????
+  #     # if (b[i] < 1) {
+  #     # #    break
+  #     #         weight <- rep(1/d, d)
+  #     #   } else {
+  #   # zwi??kszamy wagi ocen z??ych, albo zmniejszamy dobrych
+  #         weight_new[ae.vec] <- weight[ae.vec]*b[i]
+  #         weight_new[-ae.vec] <- weight[-ae.vec]
+  #         z <- sum(weight_new[ae.vec]) + sum(weight_new[-ae.vec])
+  #         weight <- weight_new/z
+  #     #  }
+  #   #####
+
+
     proba$pred.ucz[,i] <- p.pred.ucz$pred
     proba$w[,i] <- weight
     proba$model[[i]] <- p
-    
+
   }
   
   proba$b <- b
@@ -93,7 +116,7 @@ train.boosting <- function(t.n
 }
 
 
-boost.n <- 50
+boost.n <- 30
 boost.train_fun <- train.mf
 boost.train_args <- list(t.g = c(0.01, 0.01)
                          , t.lambda = c(0.05, 0.05)
@@ -107,7 +130,7 @@ boost.train_args <- list(t.g = c(0.01, 0.01)
                          , t.traincontrol = FALSE)
 boost.t.test <- wal
 
-tresh = 0.15
+tresh = 0.27
 boostType = "sample"
 
 
@@ -132,3 +155,4 @@ plot(1:length(boosting.model$rmse), boosting.model$rmse, ylim=c(min(boosting.mod
 lines(2:length(boosting.model$rmse), boosting.model$rmse_boost[2:length(boosting.model$rmse)], col = "blue")
 lines(1:length(boosting.model$rmse), rep(pred_total.rmse$rmse, length(boosting.model$rmse)), col="red")
 legend("topright", c("on boost probe", "on n models", "on one model"), fill = c("black", "blue", "red"))
+points(1:length(boosting.model$rmse), boosting.model$b, col = "green")

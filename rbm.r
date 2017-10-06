@@ -1,8 +1,7 @@
 
-
 arr.data <- function(t.data, t.n_user = NULL, t.n_movie = NULL, t.n_rate = NULL){
   # parametr n_movie jest wa??ny - je??li w test pojawi si?? nowy film, model b??dzie nieaktualny
-  #   (w sumie podobnie jak w svd )
+  #   (w sumie podobnie jak w mf )
   if (missing(t.data) || dim(t.data)[2] < 3) {
     stop("Please use a valid data in data.frame format user:movie:rate")
   }
@@ -30,32 +29,38 @@ arr.data <- function(t.data, t.n_user = NULL, t.n_movie = NULL, t.n_rate = NULL)
   } else{
     n_rate <- 1:t.n_rate
   }
+    # tu mo??na wprowadzi?? wagi dla boost
+    mat.pom <- unique(mat.pom)
   
-  mat.ucz.long <- spread(mat.pom, user, rate)
-  mat.ucz.long <- mat.ucz.long[,2:dim(mat.ucz.long)[2]]
-  mat.ucz.long[is.na(mat.ucz.long)] <- 0
+  mat.ucz.long <- spread(mat.pom, user, rate, fill = 0)
+  mat.ucz.long <- mat.ucz.long[,-c(1)]
+#  mat.ucz.long[is.na(mat.ucz.long)] <- 0
   
+    mat <- as.matrix(mat.ucz.long)
   arr.data <- list()
   for (i in n_rate){
-    arr.data[[i]] <- ifelse(mat.ucz.long == i, 1, 0)
+  #  arr.data[[i]] <- ifelse(mat == i, 1, 0)
+    ktore <- which(mat==i)
+    arr.data[[i]] <- matrix(0, dim(mat)[1], dim(mat)[2])
+    arr.data[[i]][ktore] <- 1
   }
   
   return(arr.data)
 }
-### tak się odwołujemy: arr[[i]][1:5,1:5] (rate, movie, user)
+### tak si?? odwo??ujemy: arr[[i]][1:5,1:5] (rate, movie, user)
 
 
 
 
-### prawdopodobieństwa aktywacji hidden units
-#   wynikiem powinien być wektor lub macierz dla batch
-rbm.act_hid <- function(t.weight      # lista zawierająca w każdym elemencie macierz wag dla jednej oceny
+### prawdopodobie??stwa aktywacji hidden units
+#   wynikiem powinien by?? wektor lub macierz dla batch
+rbm.act_hid <- function(t.weight      # lista zawieraj??ca w ka??dym elemencie macierz wag dla jednej oceny
                         , t.bias_hid  # wektor bias dla warsty hidden
-                        , t.state     # stany visible (lista wektorów lub macierzy w przypadku batch)
+                        , t.state     # stany visible (lista wektor??w lub macierzy w przypadku batch)
                         # lapply(arr, function(x) {x[movies,users]})
 ) {
   
-  n_hid   <- dim(t.weight[[1]])[1]  # [[1]], bo zawsze będzie przynajmniej jedna ocena
+  n_hid   <- dim(t.weight[[1]])[1]  # [[1]], bo zawsze b??dzie przynajmniej jedna ocena
   n_movie <- dim(t.weight[[1]])[2]
   n_rate  <- length(t.weight)
   
@@ -75,7 +80,7 @@ rbm.act_hid <- function(t.weight      # lista zawierająca w każdym elemencie m
   for (i in 1:n_rate){
     act[[i]] <- t.weight[[i]] %*% t.state[[i]]
   }
-  # Uwaga! to może być do zmiany jeśli będzie stacked i n_rate=1mat <- Reduce("+", act) i nie będzie to lista ale macierz
+  # Uwaga! to mo??e by?? do zmiany je??li b??dzie stacked i n_rate=1mat <- Reduce("+", act) i nie b??dzie to lista ale macierz
   mat <- Reduce("+", act)  
   mat <- mat + t.bias_hid
   return(1/(1+exp(-mat)))
@@ -83,14 +88,14 @@ rbm.act_hid <- function(t.weight      # lista zawierająca w każdym elemencie m
 }
 
 
-### prawdopodobieństwa aktywacji visible units
-rbm.act_vis <- function(t.weight      # lista zawierająca w kaądym elemencie macierz wag dla jednej oceny
-                        , t.bias_vis  # lista zawierająca w kaądym elemencie wektor bias dla jednej oceny 
+### prawdopodobie??stwa aktywacji visible units
+rbm.act_vis <- function(t.weight      # lista zawieraj??ca w ka??dym elemencie macierz wag dla jednej oceny
+                        , t.bias_vis  # lista zawieraj??ca w ka??dym elemencie wektor bias dla jednej oceny 
                         , t.state     # stany hidden (wektor lub macierz w przypadku batch)
                         # czyli wektor lub macierz, nie lista!
 ) {
   
-  n_hid   <- dim(t.weight[[1]])[1]  # [[1]], bo zawsze będzie przynajmniej jedna ocena
+  n_hid   <- dim(t.weight[[1]])[1]  # [[1]], bo zawsze b??dzie przynajmniej jedna ocena
   n_movie <- dim(t.weight[[1]])[2]
   n_rate  <- length(t.weight)   # dim(t.weight)[3]
   
@@ -114,7 +119,7 @@ rbm.act_vis <- function(t.weight      # lista zawierająca w kaądym elemencie m
 }
 
 
-# włączamy i wyłączamy unit z pstwem zdefiniowanym energią
+# w????czamy i wy????czamy unit z pstwem zdefiniowanym energi??
 rbm.samp_state <- function(t.mat, t.ev = TRUE) {
   if (class(t.mat) == "matrix"){
     dims <- dim(t.mat)
@@ -129,7 +134,7 @@ rbm.samp_state <- function(t.mat, t.ev = TRUE) {
         ret_pom <- ret_pom + t.mat[[i]]*i
       }
       ret_pom <- round(ret_pom)
-      # żeby mieć jedną ocenę wylosowaną
+      # ??eby mie?? jedn?? ocen?? wylosowan??
       for (i in 1:n_rate){
         ret[[i]] <- ifelse(ret_pom == i, 1, 0)
       }
@@ -186,7 +191,7 @@ train.rbm <- function(t.n_hid = 45
   if (t.epochs <= 0) { stop("Please set valid number of epochs") }
   if (t.batch_size <= 0 || t.batch_size > n_user) { stop("Please set valid size of batch") }
   
-  # do obsluzenia stack tutaj pętla po length(t.n_hid) (???)
+  # do obsluzenia stack tutaj p??tla po length(t.n_hid) (???)
   weight <- list()
   momentum_speed <- list()
   bias_vis <- list()
@@ -215,7 +220,7 @@ train.rbm <- function(t.n_hid = 45
       batch_end = batch_beg + t.batch_size - 1
       if (batch_end >= n_user) (batch_end <- n_user)
       batch <- lapply(data, function(x) {x[,batch_beg:batch_end]})
-      # tu się czasem sypie, trzeba to obsłużyć
+      # tu si?? czasem sypie, trzeba to obs??u??y??
       batch_sign <- sign(rowSums(Reduce("+", batch)))
       
       if (batch_end < n_user) (batch_beg <- batch_end + 1)
@@ -232,7 +237,7 @@ train.rbm <- function(t.n_hid = 45
       # albo pstwa
       V1 <- rbm.samp_state(rbm.act_vis(weight, bias_vis, H0)) # stany aktywacji visible units wg p-stw (vi x batch x k)
       V1 <- lapply(V1, function(x) { x*batch_sign })
-      H1 <- rbm.act_hid(weight, bias_hid, V1) # tu już tylko pstwo, nie losowy stan (a jakby nie?)
+      H1 <- rbm.act_hid(weight, bias_hid, V1) # tu ju?? tylko pstwo, nie losowy stan (a jakby nie?)
       
       vh1 <- list()
       for (k in 1:n_rate){
@@ -242,7 +247,7 @@ train.rbm <- function(t.n_hid = 45
       
       gradient <- list()
       for(i in 1:n_rate){
-        # myśle ze indykatow wag powinien byc przy V0
+        # my??le ze indykatow wag powinien byc przy V0
         gradient[[i]]        <- (vh0[[i]] - vh1[[i]])         #update tylko ocen, kt??re byly
         momentum_speed[[i]]  <- t.momentum * momentum_speed[[i]] + gradient[[i]]       # a tu algorytm uczenia
         weight[[i]]          <- weight[[i]] +  (momentum_speed[[i]] + t.lambda * sum(abs(weight[[i]])))* t.learning_rate
@@ -321,9 +326,9 @@ rbm.pred_vis <- function(t.weight
 
 pred.rbm <- function(t.model, t.test){
   
-  # potrzebujemy wszystkich dostępnych ocen usera do predykcji
-  # na razie zostawię tak, ale potem być może trzeba będzie zmienić na pełne ucz
-  # choć jeśli to będzie ogarnięte w bagg i boost, to nie będzie to problem
+  # potrzebujemy wszystkich dost??pnych ocen usera do predykcji
+  # na razie zostawi?? tak, ale potem by?? mo??e trzeba b??dzie zmieni?? na pe??ne ucz
+  # cho?? je??li to b??dzie ogarni??te w bagg i boost, to nie b??dzie to problem
   data <- subset(t.model$ucz, user %in% t.test$user)
   data <- arr.data(data, t.n_user = t.model$n_user, t.n_movie = t.model$n_movie, t.n_rate = t.model$n_rate)
   
@@ -369,17 +374,26 @@ start <- Sys.time()
 rbm.model = train.rbm(t.n_hid = 45
                       , t.ucz = ucz #subset(ucz, rate==1)
                       , t.wal = wal #subset(wal, rate==1)
-                      , t.n_movie = 1682
+                      , t.n_movie = n_movie #1682
                       , t.learning_rate = 0.01
                       , t.lambda = 0
-                      , t.epochs = 10
-                      , t.batch_size = 200
+                      , t.epochs = 5#20
+                      , t.batch_size = 50#100
                       , t.momentum = 0.8
                       , t.train_control = T)
+# min rmse jest ok 3-5 epoki, ALE
+# im mniej epok, tym mniejszy rozrzut ocen - prawosko??ny
+# lepiej wi??cej epok, ale z mniejszym batch
+# mo??na potestowa??, czy bagging pomo??e w tym przypadku
 stop <- Sys.time()
 stop-start
 # Time difference of 1.271265 mins
 # Time difference of 1.003673 mins
+# Time difference of 36.86969 secs
+# 5/50
+# Time difference of 1.017087 mins
+# po zmianie arr.data
+# Time difference of 44.25542 secs
 
 
 plot(1:rbm.model$epochs, rbm.model$rmse_u[1:rbm.model$epochs], type= "l"
@@ -396,5 +410,3 @@ hist(test$rate, breaks = 0:6, xlim = c(0, 5)); hist(rbm.pred$pred, xlim = c(0, 5
 
 par(mfrow=c(1,2))
 boxplot(test$rate); boxplot(rbm.pred$pred, ylim=c(1,5))
-
-

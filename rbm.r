@@ -1,4 +1,21 @@
 
+library(Rcpp)
+
+cppFunction('
+  NumericMatrix spreadC(NumericMatrix data, int user, int movie){
+    NumericMatrix out(movie, user);
+    int k = data.nrow();
+            
+    for(int i=0; i<k; ++i){
+      int u = data(i,0);
+      int m = data(i,1);
+      int r = data(i,2);
+      out(m, u) = r;
+    }
+    return(out);
+  }')
+
+# te parametry nei mog?? by?? null
 arr.data <- function(t.data, t.n_user = NULL, t.n_movie = NULL, t.n_rate = NULL){
   # parametr n_movie jest wa??ny - je??li w test pojawi si?? nowy film, model b??dzie nieaktualny
   #   (w sumie podobnie jak w mf )
@@ -32,8 +49,9 @@ arr.data <- function(t.data, t.n_user = NULL, t.n_movie = NULL, t.n_rate = NULL)
     # tu mo??na wprowadzi?? wagi dla boost
     mat.pom <- unique(mat.pom)
   
-  mat.ucz.long <- spread(mat.pom, user, rate, fill = 0)
-  mat.ucz.long <- mat.ucz.long[,-c(1)]
+#  mat.ucz.long <- spread(mat.pom, user, rate, fill = 0)
+    mat.ucz.long <- spreadC(as.matrix(mat.pom), t.n_user, t.n_movie)  
+#  mat.ucz.long <- mat.ucz.long[,-c(1)]
 #  mat.ucz.long[is.na(mat.ucz.long)] <- 0
   
     mat <- as.matrix(mat.ucz.long)
@@ -113,7 +131,8 @@ rbm.act_vis <- function(t.weight      # lista zawieraj??ca w ka??dym elemencie m
   denom <- Reduce("+", counter)
   ret <- list()
   for (i in 1:n_rate){
-    ret[[i]] <- lapply(counter, function(x) { x <- x/denom})[[i]]
+  #  ret[[i]] <- lapply(counter, function(x) { x <- x/denom})[[i]]
+    ret[[i]] <- counter[[i]]/denom
   }
   return(ret)
 }
@@ -166,8 +185,8 @@ train.rbm <- function(t.n_hid = 45
                       , t.batch_size = 20
                       , t.momentum = 0.9
                       , t.train_control = F) {
-  
-  data <- arr.data(t.ucz, t.n_user, t.n_movie, t.n_rate)
+  # dla du??o wi??kszych zbior??w danych trzeba b??dzie przenie???? arr.data do p??tli
+  data <- arr.data(t.ucz, t.n_user, t.n_movie)
   
   # bez sensu, trzeba to sprawdzic tu i potem juz nie w arr.data
   if (is.null(t.n_user)){
@@ -212,6 +231,7 @@ train.rbm <- function(t.n_hid = 45
   
   for (epoch in 1:t.epochs) {
     inProbe <- sample(1:n_user)
+    cat()
     data <- lapply(data, function(x) {x[,inProbe]})
     
     batch_beg = 1
@@ -304,8 +324,9 @@ rbm.pred_hid <- function(t.weight
                          , t.data # lista dla batch, wektor dla jednego usera
 ){
   n_movie <- dim(t.weight[[1]])[2]
+  n_user <- dim(t.data)[2]
   if (class(t.data) != "list"){
-    data <- arr.data(t.data = t.data, t.n_movie = n_movie)
+    data <- arr.data(t.data = t.data, t.n_user = n_user, t.n_movie = n_movie)
   } else {
     data <- t.data
   }
@@ -324,6 +345,29 @@ rbm.pred_vis <- function(t.weight
 }
 
 
+cppFunction('
+  NumericVector predRbm(NumericVector user, NumericVector movie, int n_rate, List pred_vis, int l){
+            
+            NumericMatrix h = pred_vis[0];
+            NumericMatrix weigh(h.nrow(), h.ncol());
+            NumericVector pred(l);
+            
+            for (int k = 0; k < n_rate;  ++k){
+            NumericMatrix pom = pred_vis[k];
+            int r = pom.nrow(); // mozna zmienic na po kolumnach
+            for(int r_i=0; r_i<r; ++r_i){
+            weigh(r_i,_) = weigh(r_i,_) + pom(r_i,_) * (k+1);
+            }
+            }
+            
+            for (int i=0; i<l; ++i){
+            int m = movie[i]-1;
+            int u = user[i]-1;
+            pred(i) = weigh(m, u);
+            }    
+            
+            return(pred);
+            }')
 pred.rbm <- function(t.model, t.test){
   
   # potrzebujemy wszystkich dost??pnych ocen usera do predykcji
@@ -337,23 +381,10 @@ pred.rbm <- function(t.model, t.test){
   l <- dim(t.test)[1]
   
   n_rate <- t.model$n_rate
-  
   pred_hid <- rbm.pred_hid(t.model$weight, t.model$bias_hid, data)
   pred_vis <- rbm.pred_vis(t.model$weight, t.model$bias_vis, pred_hid)
   
-  weigh <- list()
-  # wartosc oczekiwana
-  for(k in 1:n_rate){
-    weigh[[k]] <- pred_vis[[k]] * k
-  }
-  weigh <- Reduce("+", weigh)
-  weigh <- weigh/Reduce("+", pred_vis)
-  
-  t.rate <- numeric(l)
-  for (i in 1:l){
-    t.rate[i] <- weigh[movie[i], user[i]]
-    # a jak nie mamy to co?
-  }
+  t.rate <- predRbm(user, movie, n_rate, pred_vis, l)
   
   rmse <- sqrt(sum((t.test$rate - t.rate)^2, na.rm = T)/length(which(is.na(t.rate)==F)))
   cover <- length(t.rate[is.na(t.rate)==FALSE])/dim(t.test)[1]
@@ -374,6 +405,7 @@ start <- Sys.time()
 rbm.model = train.rbm(t.n_hid = 45
                       , t.ucz = ucz #subset(ucz, rate==1)
                       , t.wal = wal #subset(wal, rate==1)
+                      , t.n_user = 943
                       , t.n_movie = n_movie #1682
                       , t.learning_rate = 0.01
                       , t.lambda = 0
@@ -394,6 +426,15 @@ stop-start
 # Time difference of 1.017087 mins
 # po zmianie arr.data
 # Time difference of 44.25542 secs
+# Time difference of 46.967 secs
+
+# Time difference of 46.26663 secs
+# pred.rbm z rcpp
+# Time difference of 44.49745 secs
+# arr.data z rcpp
+# zjebalo sie!
+
+
 
 
 plot(1:rbm.model$epochs, rbm.model$rmse_u[1:rbm.model$epochs], type= "l"

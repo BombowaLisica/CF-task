@@ -2,22 +2,46 @@
 library(Rcpp)
 
 cppFunction('
-  NumericMatrix spreadC(NumericMatrix data, int user, int movie){
-    NumericMatrix out(movie, user);
-    int k = data.nrow();
+  NumericVector rowSumsC(NumericMatrix x) {
+    int nrow = x.nrow(), ncol = x.ncol();
+    NumericVector out(nrow);
             
-    for(int i=0; i<k; ++i){
-      int u = data(i,0);
-      int m = data(i,1);
-      int r = data(i,2);
-      out(m, u) = r;
+    for (int i = 0; i < nrow; i++) {
+      double total = 0;
+      for (int j = 0; j < ncol; j++) {
+        total += x(i, j);
+      }
+      out[i] = total;
     }
-    return(out);
+    return out;
   }')
 
-# te parametry nei mog?? by?? null
+
+
+
+cppFunction('
+  List spreadC(NumericMatrix data, int user, int movie, int rate){
+    List outList(rate);
+    NumericMatrix out(movie, user);
+    int k = data.nrow();
+
+    for(int j=0; j<rate; ++j){
+      NumericMatrix outPom(movie, user);
+      for(int i=0; i<k; ++i){
+        int u = data(i,0);
+        int m = data(i,1);
+        int r = data(i,2);
+        if (r == j+1){ outPom(m-1, u-1) = 1;}
+      }
+      outList[j] = outPom;
+    }
+
+    return(outList);
+  }')
+
+# te parametry nie mog¹ byæ nu¿
 arr.data <- function(t.data, t.n_user = NULL, t.n_movie = NULL, t.n_rate = NULL){
-  # parametr n_movie jest wa??ny - je??li w test pojawi si?? nowy film, model b??dzie nieaktualny
+  # parametr n_movie jest wa¿ny - jeLœli w test pojawi siê nowy film, model bêdzie nieaktualny
   #   (w sumie podobnie jak w mf )
   if (missing(t.data) || dim(t.data)[2] < 3) {
     stop("Please use a valid data in data.frame format user:movie:rate")
@@ -25,7 +49,7 @@ arr.data <- function(t.data, t.n_user = NULL, t.n_movie = NULL, t.n_rate = NULL)
   names(t.data) <- c("user", "movie", "rate")
   mat.pom <- data.frame(t.data)[,1:3]
   
-  # to jest wa??ne - je??li w ucz nie by??o usera z test i ??eby dobrze robic predykcje
+  # to jest wa¿ne - jeœli w ucz nie by³o usera z test i ¿eby dobrze robic predykcje
   if (!is.null(t.n_user)){
     if (t.n_user > length(unique(t.data$user))){
       new.user <- subset(1:t.n_user, !1:t.n_user %in% (unique(t.data$user)))
@@ -33,7 +57,7 @@ arr.data <- function(t.data, t.n_user = NULL, t.n_movie = NULL, t.n_rate = NULL)
       mat.pom <- rbind(mat.pom, new.user)
     }
   }
-  # to jest wa??ne - mo??na zdefiniowa?? wi??cej film??w, ni?? trafi do aktualnie wylosowanej pr??by ucz??cej
+  # to jest wa¿ne - mo¿na zdefiniowaæ wiêcej filmAlw, ni¿ trafi do aktualnie wylosowanej prAlby ucz¹cej
   if (!is.null(t.n_movie)){
     if (t.n_movie > length(unique(t.data$movie))){
       new.movie <- subset(1:t.n_movie, !1:t.n_movie %in% (unique(t.data$movie)))
@@ -44,41 +68,45 @@ arr.data <- function(t.data, t.n_user = NULL, t.n_movie = NULL, t.n_rate = NULL)
   if (is.null(t.n_rate)){
     n_rate <- sort(unique(t.data$rate))
   } else{
-    n_rate <- 1:t.n_rate
+    n_rate <- t.n_rate
   }
-    # tu mo??na wprowadzi?? wagi dla boost
-    mat.pom <- unique(mat.pom)
+    # tu mo¿na wprowadziæ wagi dla boost
+#    mat.pom <- unique(mat.pom)
+  dup <- duplicated(mat.pom)
+  mat.pom <- mat.pom[!dup,]
   
+    
 #  mat.ucz.long <- spread(mat.pom, user, rate, fill = 0)
-    mat.ucz.long <- spreadC(as.matrix(mat.pom), t.n_user, t.n_movie)  
+    mat.ucz.long <- spreadC(as.matrix(mat.pom), t.n_user, t.n_movie, n_rate)  
 #  mat.ucz.long <- mat.ucz.long[,-c(1)]
 #  mat.ucz.long[is.na(mat.ucz.long)] <- 0
   
-    mat <- as.matrix(mat.ucz.long)
-  arr.data <- list()
-  for (i in n_rate){
-  #  arr.data[[i]] <- ifelse(mat == i, 1, 0)
-    ktore <- which(mat==i)
-    arr.data[[i]] <- matrix(0, dim(mat)[1], dim(mat)[2])
-    arr.data[[i]][ktore] <- 1
-  }
+#  mat <- as.matrix(mat.ucz.long)
+#  arr.data <- list()
+#  for (i in n_rate){
+#  #  arr.data[[i]] <- ifelse(mat == i, 1, 0)
+#    ktore <- which(mat==i)
+#    arr.data[[i]] <- matrix(0, dim(mat)[1], dim(mat)[2])
+#    arr.data[[i]][ktore] <- 1
+#  }
   
-  return(arr.data)
+#  return(arr.data)
+  return(mat.ucz.long)
 }
-### tak si?? odwo??ujemy: arr[[i]][1:5,1:5] (rate, movie, user)
+### tak siê odwo³ujemy: arr[[i]][1:5,1:5] (rate, movie, user)
 
 
 
 
-### prawdopodobie??stwa aktywacji hidden units
-#   wynikiem powinien by?? wektor lub macierz dla batch
-rbm.act_hid <- function(t.weight      # lista zawieraj??ca w ka??dym elemencie macierz wag dla jednej oceny
+### prawdopodobieñstwa aktywacji hidden units
+#   wynikiem powinien byæ wektor lub macierz dla batch
+rbm.act_hid <- function(t.weight      # lista zawieraj¹ca w ka¿dym elemencie macierz wag dla jednej oceny
                         , t.bias_hid  # wektor bias dla warsty hidden
-                        , t.state     # stany visible (lista wektor??w lub macierzy w przypadku batch)
+                        , t.state     # stany visible (lista wektorAlw lub macierzy w przypadku batch)
                         # lapply(arr, function(x) {x[movies,users]})
 ) {
   
-  n_hid   <- dim(t.weight[[1]])[1]  # [[1]], bo zawsze b??dzie przynajmniej jedna ocena
+  n_hid   <- dim(t.weight[[1]])[1]  # [[1]], bo zawsze bêdzie przynajmniej jedna ocena
   n_movie <- dim(t.weight[[1]])[2]
   n_rate  <- length(t.weight)
   
@@ -98,7 +126,7 @@ rbm.act_hid <- function(t.weight      # lista zawieraj??ca w ka??dym elemencie m
   for (i in 1:n_rate){
     act[[i]] <- t.weight[[i]] %*% t.state[[i]]
   }
-  # Uwaga! to mo??e by?? do zmiany je??li b??dzie stacked i n_rate=1mat <- Reduce("+", act) i nie b??dzie to lista ale macierz
+  # Uwaga! to mo¿e byæ do zmiany jeœli bêdzie stacked i n_rate=1mat <- Reduce("+", act) i nie bêdzie to lista ale macierz
   mat <- Reduce("+", act)  
   mat <- mat + t.bias_hid
   return(1/(1+exp(-mat)))
@@ -106,14 +134,14 @@ rbm.act_hid <- function(t.weight      # lista zawieraj??ca w ka??dym elemencie m
 }
 
 
-### prawdopodobie??stwa aktywacji visible units
-rbm.act_vis <- function(t.weight      # lista zawieraj??ca w ka??dym elemencie macierz wag dla jednej oceny
-                        , t.bias_vis  # lista zawieraj??ca w ka??dym elemencie wektor bias dla jednej oceny 
+### prawdopodobieñstwa aktywacji visible units
+rbm.act_vis <- function(t.weight      # lista zawieraj¹ca w ka¿dym elemencie macierz wag dla jednej oceny
+                        , t.bias_vis  # lista zawieraj¹ca w ka¿dym elemencie wektor bias dla jednej oceny 
                         , t.state     # stany hidden (wektor lub macierz w przypadku batch)
                         # czyli wektor lub macierz, nie lista!
 ) {
   
-  n_hid   <- dim(t.weight[[1]])[1]  # [[1]], bo zawsze b??dzie przynajmniej jedna ocena
+  n_hid   <- dim(t.weight[[1]])[1]  # [[1]], bo zawsze bêdzie przynajmniej jedna ocena
   n_movie <- dim(t.weight[[1]])[2]
   n_rate  <- length(t.weight)   # dim(t.weight)[3]
   
@@ -125,7 +153,7 @@ rbm.act_vis <- function(t.weight      # lista zawieraj??ca w ka??dym elemencie m
   
   act <- list()
   for (i in 1:n_rate){
-    act[[i]] <- t(t.weight[[i]]) %*% t.state+ t.bias_vis[[i]]
+    act[[i]] <- t(t.weight[[i]]) %*% t.state + t.bias_vis[[i]]
   }
   counter <- lapply(act, exp)
   denom <- Reduce("+", counter)
@@ -138,7 +166,7 @@ rbm.act_vis <- function(t.weight      # lista zawieraj??ca w ka??dym elemencie m
 }
 
 
-# w????czamy i wy????czamy unit z pstwem zdefiniowanym energi??
+# w³¹czamy i wy³¹czamy unit z pstwem zdefiniowanym energi¹
 rbm.samp_state <- function(t.mat, t.ev = TRUE) {
   if (class(t.mat) == "matrix"){
     dims <- dim(t.mat)
@@ -153,7 +181,7 @@ rbm.samp_state <- function(t.mat, t.ev = TRUE) {
         ret_pom <- ret_pom + t.mat[[i]]*i
       }
       ret_pom <- round(ret_pom)
-      # ??eby mie?? jedn?? ocen?? wylosowan??
+      # ¿eby mieæ jedn¹ ocenê wylosowan¹
       for (i in 1:n_rate){
         ret[[i]] <- ifelse(ret_pom == i, 1, 0)
       }
@@ -185,9 +213,9 @@ train.rbm <- function(t.n_hid = 45
                       , t.batch_size = 20
                       , t.momentum = 0.9
                       , t.train_control = F) {
-  # dla du??o wi??kszych zbior??w danych trzeba b??dzie przenie???? arr.data do p??tli
-  data <- arr.data(t.ucz, t.n_user, t.n_movie)
-  
+  # dla du¿o wiêkszych zbiorAlw danych trzeba bêdzie przenieœæ arr.data do pêtli
+  data <- arr.data(t.ucz, t.n_user, t.n_movie, t.n_rate)
+
   # bez sensu, trzeba to sprawdzic tu i potem juz nie w arr.data
   if (is.null(t.n_user)){
     n_user <- dim(data[[1]])[2]  # n
@@ -210,7 +238,7 @@ train.rbm <- function(t.n_hid = 45
   if (t.epochs <= 0) { stop("Please set valid number of epochs") }
   if (t.batch_size <= 0 || t.batch_size > n_user) { stop("Please set valid size of batch") }
   
-  # do obsluzenia stack tutaj p??tla po length(t.n_hid) (???)
+  # do obsluzenia stack tutaj pêtla po length(t.n_hid) (???)
   weight <- list()
   momentum_speed <- list()
   bias_vis <- list()
@@ -231,7 +259,6 @@ train.rbm <- function(t.n_hid = 45
   
   for (epoch in 1:t.epochs) {
     inProbe <- sample(1:n_user)
-    cat()
     data <- lapply(data, function(x) {x[,inProbe]})
     
     batch_beg = 1
@@ -240,13 +267,15 @@ train.rbm <- function(t.n_hid = 45
       batch_end = batch_beg + t.batch_size - 1
       if (batch_end >= n_user) (batch_end <- n_user)
       batch <- lapply(data, function(x) {x[,batch_beg:batch_end]})
-      # tu si?? czasem sypie, trzeba to obs??u??y??
-      batch_sign <- sign(rowSums(Reduce("+", batch)))
+      # tu siê czasem sypie, trzeba to obs³u¿yæ
+      batch_sign <- sign(rowSumsC(Reduce("+", batch)))
+        weightPom <- lapply(weight, function(x) { x * batch_sign})
       
       if (batch_end < n_user) (batch_beg <- batch_end + 1)
       
       ### CD1
-      H0 <- rbm.samp_state(rbm.act_hid(weight, bias_hid, batch))
+      # tu jeszcze ok, bo wagi wyzeruje batch
+      H0 <- rbm.samp_state(rbm.act_hid(weightPom, bias_hid, batch))
       
       vh0 <- list()
       for (k in 1:n_rate){
@@ -255,9 +284,9 @@ train.rbm <- function(t.n_hid = 45
       }
       
       # albo pstwa
-      V1 <- rbm.samp_state(rbm.act_vis(weight, bias_vis, H0)) # stany aktywacji visible units wg p-stw (vi x batch x k)
-      V1 <- lapply(V1, function(x) { x*batch_sign })
-      H1 <- rbm.act_hid(weight, bias_hid, V1) # tu ju?? tylko pstwo, nie losowy stan (a jakby nie?)
+      V1 <- rbm.samp_state(rbm.act_vis(weightPom, bias_vis, H0)) # stany aktywacji visible units wg p-stw (vi x batch x k)
+#      V1 <- lapply(V1, function(x) { x*batch_sign })
+      H1 <- rbm.act_hid(weightPom, bias_hid, V1) # tu ju¿ tylko pstwo, nie losowy stan (a jakby nie?)
       
       vh1 <- list()
       for (k in 1:n_rate){
@@ -267,14 +296,13 @@ train.rbm <- function(t.n_hid = 45
       
       gradient <- list()
       for(i in 1:n_rate){
-        # my??le ze indykatow wag powinien byc przy V0
-        gradient[[i]]        <- (vh0[[i]] - vh1[[i]])         #update tylko ocen, kt??re byly
+        gradient[[i]]        <- (vh0[[i]] - vh1[[i]])         
         momentum_speed[[i]]  <- t.momentum * momentum_speed[[i]] + gradient[[i]]       # a tu algorytm uczenia
-        weight[[i]]          <- weight[[i]] +  (momentum_speed[[i]] + t.lambda * sum(abs(weight[[i]])))* t.learning_rate
-        
-        bias_vis[[i]]        <- bias_vis[[i]] + t.learning_rate * (rowSums(batch[[k]] - V1[[k]])/dim(V1[[k]])[2])
+        weight[[i]]          <- weight[[i]] +  (momentum_speed[[i]] + t.lambda * sum(abs(weightPom[[i]])))* t.learning_rate
+#        weight[[i]]          <- weight[[i]] * batch_sign  # update tylko ocen, które byly w batch
+        bias_vis[[i]]        <- bias_vis[[i]] + t.learning_rate * (rowSumsC(batch[[k]] - V1[[k]])/dim(V1[[k]])[2])
       }
-      bias_hid <- bias_hid + t.learning_rate * (rowSums(H0 - H1)/dim(H1)[2])
+      bias_hid <- bias_hid + t.learning_rate * (rowSumsC(H0 - H1)/dim(H1)[2])
     }
     if (t.train_control == T){
       t.pred_u <- pred.rbm(list(weight = weight, bias_hid = bias_hid, bias_vis = bias_vis, ucz = t.ucz, n_user = n_user, n_movie = n_movie, n_rate = n_rate), t.ucz)
@@ -348,31 +376,31 @@ rbm.pred_vis <- function(t.weight
 cppFunction('
   NumericVector predRbm(NumericVector user, NumericVector movie, int n_rate, List pred_vis, int l){
             
-            NumericMatrix h = pred_vis[0];
-            NumericMatrix weigh(h.nrow(), h.ncol());
-            NumericVector pred(l);
+    NumericMatrix h = pred_vis[0];
+    NumericMatrix weigh(h.nrow(), h.ncol());
+    NumericVector pred(l);
             
-            for (int k = 0; k < n_rate;  ++k){
-            NumericMatrix pom = pred_vis[k];
-            int r = pom.nrow(); // mozna zmienic na po kolumnach
-            for(int r_i=0; r_i<r; ++r_i){
-            weigh(r_i,_) = weigh(r_i,_) + pom(r_i,_) * (k+1);
-            }
-            }
+    for (int k = 0; k < n_rate;  ++k){
+      NumericMatrix pom = pred_vis[k];
+      int r = pom.nrow(); // mozna zmienic na po kolumnach
+      for(int r_i=0; r_i<r; ++r_i){
+        weigh(r_i,_) = weigh(r_i,_) + pom(r_i,_) * (k+1);
+      }
+    }
             
-            for (int i=0; i<l; ++i){
-            int m = movie[i]-1;
-            int u = user[i]-1;
-            pred(i) = weigh(m, u);
-            }    
+    for (int i=0; i<l; ++i){
+      int m = movie[i]-1;
+      int u = user[i]-1;
+      pred(i) = weigh(m, u);
+    }    
             
-            return(pred);
-            }')
+    return(pred);
+  }')
 pred.rbm <- function(t.model, t.test){
   
-  # potrzebujemy wszystkich dost??pnych ocen usera do predykcji
-  # na razie zostawi?? tak, ale potem by?? mo??e trzeba b??dzie zmieni?? na pe??ne ucz
-  # cho?? je??li to b??dzie ogarni??te w bagg i boost, to nie b??dzie to problem
+  # potrzebujemy wszystkich dostêpnych ocen usera do predykcji
+  # na razie zostawiê tak, ale potem byæ mo¿e trzeba bêdzie zmieniæ na peL‚ne ucz
+  # choæ jeœli to bêdzie ogarniête w bagg i boost, to nie bêdzie to problem
   data <- subset(t.model$ucz, user %in% t.test$user)
   data <- arr.data(data, t.n_user = t.model$n_user, t.n_movie = t.model$n_movie, t.n_rate = t.model$n_rate)
   
@@ -384,6 +412,19 @@ pred.rbm <- function(t.model, t.test){
   pred_hid <- rbm.pred_hid(t.model$weight, t.model$bias_hid, data)
   pred_vis <- rbm.pred_vis(t.model$weight, t.model$bias_vis, pred_hid)
   
+#  weigh <- list()
+#  # wartosc oczekiwana
+#  for(k in 1:n_rate){
+#    weigh[[k]] <- pred_vis[[k]] * k
+#  }
+#  weigh <- Reduce("+", weigh)
+#  weigh <- weigh/Reduce("+", pred_vis)
+  
+#  t.rate <- numeric(l)
+#  for (i in 1:l){
+#    t.rate[i] <- weigh[movie[i], user[i]]
+#    # a jak nie mamy to co?
+#  }
   t.rate <- predRbm(user, movie, n_rate, pred_vis, l)
   
   rmse <- sqrt(sum((t.test$rate - t.rate)^2, na.rm = T)/length(which(is.na(t.rate)==F)))
@@ -407,16 +448,18 @@ rbm.model = train.rbm(t.n_hid = 45
                       , t.wal = wal #subset(wal, rate==1)
                       , t.n_user = 943
                       , t.n_movie = n_movie #1682
+                      , t.n_rate = 5
                       , t.learning_rate = 0.01
                       , t.lambda = 0
-                      , t.epochs = 5#20
-                      , t.batch_size = 50#100
+                      , t.epochs = 3
+                      , t.batch_size = 100
                       , t.momentum = 0.8
                       , t.train_control = T)
 # min rmse jest ok 3-5 epoki, ALE
-# im mniej epok, tym mniejszy rozrzut ocen - prawosko??ny
-# lepiej wi??cej epok, ale z mniejszym batch
-# mo??na potestowa??, czy bagging pomo??e w tym przypadku
+# im mniej epok, tym mniejszy rozrzut ocen - prawoskoœny
+# lepiej wiêcej epok, ale z mniejszym batch
+# mo¿na potestowaæ, czy bagging pomo¿e w tym przypadku
+# najlepiej to wygl¹da dla 10/100, min przy 3 epoce, ALE rozrzut duzo mniejszy
 stop <- Sys.time()
 stop-start
 # Time difference of 1.271265 mins
@@ -428,15 +471,19 @@ stop-start
 # Time difference of 44.25542 secs
 # Time difference of 46.967 secs
 
-# Time difference of 46.26663 secs
+### 3/100
+# Time difference of 27.32673 secs
 # pred.rbm z rcpp
-# Time difference of 44.49745 secs
+# Time difference of 26.44071 secs
 # arr.data z rcpp
-# zjebalo sie!
+# Time difference of 24.37044 secs
+# zmiana rowSums na rowSumsC nic nie daje
+
+### 100/100
+# Time difference of 13.03954 mins
 
 
-
-
+par(mfrow=c(1,1))
 plot(1:rbm.model$epochs, rbm.model$rmse_u[1:rbm.model$epochs], type= "l"
      , main = "RBM", xlab = "epoch", ylab = "rmse", ylim = c(1, 1.2))
 lines(1:rbm.model$epochs, rbm.model$rmse_w[1:rbm.model$epochs], col = "red")
